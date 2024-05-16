@@ -102,7 +102,7 @@ public:
         PIO pio_1 = pio1;
         
         // state machine 0
-        uint8_t sm1 = 0;
+        uint8_t sm1 = pio_claim_unused_sm(pio_1, true);
         // configure the used pins as input with pull up
         pio_gpio_init(pio_1, rotary_encoder_A);
         gpio_set_pulls(rotary_encoder_A, true, false);
@@ -125,7 +125,7 @@ public:
         pio1_hw->inte0 = PIO_IRQ0_INTE_SM0_BITS | PIO_IRQ0_INTE_SM1_BITS;
         // init the sm.
         // Note: the program starts after the jump table -> initial_pc = 16
-        pio_sm_init(pio_1, sm1, 16, &c);
+        pio_sm_init(pio_1, sm1, offset + 16, &c);
         // enable the sm
         pio_sm_set_enabled(pio_1, sm1, true);
     }

@@ -95,7 +95,7 @@ void setTarget(float t, float deltaT){
 	float velocicity = 1;
 
 	for(int k = 0; k < 2; k++){
-		positionChange[k] = velocicity * deltaT * pulsesPerTurn;
+		positionChange[k] = velocicity * deltaT * pulsesPerTurn*4;
 	}
 
 	for(int k = 0; k < 2; k++){
@@ -226,8 +226,9 @@ void loop() {
 			digitalWrite(IR_LEDS_PIN, HIGH);
 			
 			float kp = 2;
-			float kd = 0.5;
+			float kd = 0.6;
 			float ki = 0.0;
+			previousTime = micros();
 
 			while(1){
 				long currentTime = micros();
