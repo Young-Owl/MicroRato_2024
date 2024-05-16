@@ -6,6 +6,7 @@
 #include "screen.h"
 #include "defines.h"
 #include "pid.h"
+#include "pio_rotary_encoder.h"
 
 /* ------ Pinmodes ------ */
 uint8_t inputPins[] = {JOYSTICK_X_PIN, JOYSTICK_Y_PIN, ALERT_ADC2_PIN, ALERT_ADC1_PIN};
@@ -16,6 +17,8 @@ uint8_t selectedMenu = 0;
 uint8_t led = 0;
 uint16_t valADCs[8] = {0};
 
+// Initialize static member of class Rotary_encoder
+int RotaryEncoder::rotation = 0;
 volatile int posi[] = {0,0};
 
 const int encodersA[] = {ENCODER_A1L_PIN, ENCODER_A2R_PIN};
@@ -50,6 +53,8 @@ ADS1015 adc2(ADC2_ADDRESS);
 MX1508 motorA(MOTOR_IN1R_PIN, MOTOR_IN2R_PIN, SLOW_DECAY);
 MX1508 motorB(MOTOR_IN3L_PIN, MOTOR_IN4L_PIN, SLOW_DECAY);
 
+RotaryEncoder encoderA(ENCODER_A1L_PIN, ENCODER_B1L_PIN);
+
 /* ------ Interrupts ------ */
 template <int t>
 void readEncoder(){
@@ -79,8 +84,6 @@ void rotate90Right(){
 		}
 	}
 }
-
-
 
 void moveMotor(int u, int motor){
 	float speed = u;
@@ -125,10 +128,13 @@ void setup() {
 	adc2.setGain(1);
 	adc2.setDataRate(4);
 
-	digitalWrite(LED_BUILTIN, LOW);
+	digitalWrite(LED_BUILTIN, HIGH);
+	
+	Serial.println("Initializing...");
 
-	attachInterrupt(digitalPinToInterrupt(encodersA[0]), readEncoder<0>, CHANGE);
-	attachInterrupt(digitalPinToInterrupt(encodersA[1]), readEncoder<1>, CHANGE);
+	encoderA.set_rotation(0);
+	//attachInterrupt(digitalPinToInterrupt(encodersA[0]), readEncoder<0>, CHANGE);
+	//attachInterrupt(digitalPinToInterrupt(encodersA[1]), readEncoder<1>, CHANGE);
 
 	/* Also sets up the I2C for 12 bit reading */
 	SetupScreen();
@@ -137,7 +143,7 @@ void setup() {
 void loop() {
 
 	ShowStartup();
-
+	Serial.println("Showing startup screen...");
 	/* Display the menu and wait for the user input via joystick / buttons
 	 * This will lock the program until the user has selected an option
 	 */
@@ -222,17 +228,18 @@ void loop() {
 			int target = pulsesPerTurn;
 
 			digitalWrite(LED_BUILTIN, HIGH);
-			float kp = 3;
+			float kp = 2;
 			float kd = 0.5;
-			float ki = 0.01;
+			float ki = 0.0;
+			posi[0] = encoderA.get_rotation();
 			float u = pidController(target, kp, ki, kd, posi);
 			while(1){
-
+				posi[0] = encoderA.get_rotation();
 				u = pidController(target, kp, ki, kd, posi);
 
 				moveMotor(u, 0);
 
-				/* Serial.print(target);
+				/*Serial.print(target);
 				Serial.print(", ");
 				Serial.println(posi[0]); */
 

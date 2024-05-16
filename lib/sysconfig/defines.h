@@ -33,7 +33,7 @@
 #define MOTOR_IN4L_PIN 13
 
 // MOTOR Control
-#define MIN_PWM 20              // Percentage
+#define MIN_PWM 0              // Percentage
 #define DEBOUNCE_TIME 5       // uS debounce time
 
 #endif
