@@ -2,21 +2,26 @@
 #include <Arduino.h>
 
 long prevT = 0;
-float eprev = 0;
-float eintegral = 0;
+float eprev[2] = {0,0};
+float eintegral[2] = {0,0};
 
-float pidController(int target, float kp, float ki, float kd, volatile int posi[2]){
-	long currentT = micros();
-	float deltaT = ((float)(currentT - prevT)) / 1.0e6;
+void pidController(long target[2], float kp, float ki, float kd, float deltaT, volatile int posi[2], float* u1, float* u2){
+	int e[2];
+	float eDerivative[2];
+	float u[2];
 
-	int e = posi[0] - target;
-	float eDerivative = (e - eprev) / deltaT;
-	eintegral += e * deltaT;
+	e[0] = posi[0] - target[0];
+	e[1] = posi[1] - target[1];
 
-	float u = (kp * e) + (ki * eintegral) + (kd * eDerivative);
+	eDerivative[0] = (e[0] - eprev[0]) / deltaT;
+	eintegral[0] += e[0] * deltaT;
 
-	prevT = currentT;
-	eprev = e;
+	eDerivative[1] = (e[1] - eprev[1]) / deltaT;
+	eintegral[1] += e[1] * deltaT;
 
-	return u;
+	*u1 = kp * e[0] + ki * eintegral[0] + kd * eDerivative[0];
+	*u2 = kp * e[1] + ki * eintegral[1] + kd * eDerivative[1];
+
+	eprev[0] = e[0];
+	eprev[1] = e[1];
 }

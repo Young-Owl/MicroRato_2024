@@ -3,6 +3,7 @@
 #include <U8g2lib.h>	// OLED
 #include <ADS1X15.h>	// ADC
 #include <FS_MX1508.h>	// Motor driver
+#include <pico/stdlib.h>	// PIO
 #include "screen.h"
 #include "defines.h"
 #include "pid.h"
@@ -39,7 +40,7 @@ uint8_t countsPerRevolution = pulsesPerRevolution * 4;					// Counts per revolut
 uint8_t reductionRatio = 30;											// Reduction ratio	
 uint16_t pulsesPerTurn = pulsesPerRevolution * reductionRatio;
 uint16_t countsPerTurn = countsPerRevolution * reductionRatio;
-double wheelCircumference = 0.2104867;
+double wheelCircumference = 0.2199115;									// Wheel circumference (70mm diameter)
 uint16_t pulsesPerMeter = round(pulsesPerTurn / wheelCircumference);
 
 double wheelBase = 0.167;
@@ -47,6 +48,10 @@ double circumference = 3.14159 * wheelBase;
 double formulaBase = circumference / wheelCircumference;
 uint16_t pulsesPer90Degree = round((circumference / 4) * pulsesPerMeter);
 
+float target_f[] = {0,0};
+long target[] = {0,0};
+long previousTime = 0;
+float u[2] = {0,0};
 
 /* ------ Objects ------ */
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g;
@@ -83,6 +88,22 @@ void readIR(){
 		}
 		delay(10);
 	}
+}
+
+void setTarget(float t, float deltaT){
+	float positionChange[2] = {0.0,0.0};
+	float velocicity = 1;
+
+	for(int k = 0; k < 2; k++){
+		positionChange[k] = velocicity * deltaT * pulsesPerTurn;
+	}
+
+	for(int k = 0; k < 2; k++){
+		target_f[k] = target_f[k] + positionChange[k];
+	}
+
+	target[0] = (long) target_f[0];
+	target[1] = -(long) target_f[1];
 }
 
 /* ------ Setup ------ */
@@ -204,24 +225,53 @@ void loop() {
 			/* Turn on the IR LEDs */
 			digitalWrite(IR_LEDS_PIN, HIGH);
 			
-			
+			float kp = 2;
+			float kd = 0.5;
+			float ki = 0.0;
 
+			while(1){
+				long currentTime = micros();
+				float deltaT = ((float) (currentTime - previousTime)) / 1e6;	
+				previousTime = currentTime;
+
+				posi[0] = encoderA.get_rotation0();
+				posi[1] = encoderB.get_rotation1();
+
+				/* Set the target position */
+				setTarget(currentTime/1.0e6, deltaT);
+				pidController(target, kp, ki, kd, deltaT, posi, &u[0], &u[1]);
+				moveMotor(u[0], 0, motorA, motorB);
+				moveMotor(u[1], 1, motorA, motorB);
+
+				/* u8g.clearBuffer();
+				u8g.drawStr(10, 10, "Pos: ");
+				u8g.setCursor(60, 10);
+				u8g.print(posi[1]);
+
+				u8g.drawStr(10, 40, "Target: ");
+				u8g.setCursor(60, 40);
+				u8g.print(target[1]);
+				u8g.sendBuffer(); */
+
+				if(digitalRead(STOP_BTN_PIN) == LOW){
+					break;
+				}
+			}
 
 
 			break;
 		}
 		case PERFECTED_RUN:
-			for(int i = 1; i < 10; i++){
-				digitalWrite(LED_BUILTIN, LOW);
-				motorA.motorGoP(10*i);
-				delay(2000);
-				digitalWrite(LED_BUILTIN, HIGH);
-				delay(50);
+			while(1){
+				u8g.clearBuffer();
+				u8g.drawStr(10, 10, "Pos: ");
+				u8g.print(posi[0]);
+
+				u8g.drawStr(10, 40, "Target: ");
+				u8g.print(target[0]);
 			}
+			u8g.clearBuffer();
 			
-			motorA.motorBrake();
-			motorA.motorStop();
-			break;
 
 		default:
 			break;
