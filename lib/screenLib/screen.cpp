@@ -146,7 +146,6 @@ uint8_t ShowMenu(){
 
 void ShowCalibration(){
 	u8g.clearDisplay();
-
 	u8g.clearBuffer();
 	u8g.drawXBMP(49,1, 30, 30, CalibrateArray[0]);
 	u8g.sendBuffer();
@@ -166,14 +165,14 @@ void ShowDebugLedBG(){
 	u8g.sendBuffer();
 }
 
-void ShowDebugLedP(uint16_t valADC[8]){
+void ShowDebugLedP(volatile uint16_t valADC[8]){
 	/* Draw the percentage pills based on the ADC values
 	 * The ADC values are between 0 and 4095, each pill will be 10% of 4096, so in total theres 10 pills
 	 * for each sensor. The ADC values need to be calculated and grant a percentage value.
 	 * According to that percentage, draw the needed pills.
 	 */
 	for(int i = 0; i < 8; i++){
-		uint32_t percentage = (valADC[i] * 100) / 2047;
+		uint8_t percentage = (valADC[i] * 100) / 1600;
 		uint8_t pills = percentage / 10;
 		u8g.drawXBMP(8 + (16*i), 26, 6, 30, PillArray[pills]);
 	}

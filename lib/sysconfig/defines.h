@@ -20,6 +20,7 @@
 #define ALERT_ADC2_PIN 14
 #define ALERT_ADC1_PIN 15
 #define IR_LEDS_PIN 21
+#define IR_THRESHOLD 600
 
 // MOTOR Module
 #define NUM_MOTORS 2

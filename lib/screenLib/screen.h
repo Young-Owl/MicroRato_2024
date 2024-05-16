@@ -18,6 +18,6 @@ void ShowCalibration();
 
 void ShowDebugLedBG();
 
-void ShowDebugLedP(uint16_t valADC[8]);
+void ShowDebugLedP(volatile uint16_t valADC[8]);
 
 #endif

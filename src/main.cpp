@@ -7,6 +7,7 @@
 #include "defines.h"
 #include "pid.h"
 #include "pio_rotary_encoder.h"
+#include "motorControl.h"
 
 /* ------ Pinmodes ------ */
 uint8_t inputPins[] = {JOYSTICK_X_PIN, JOYSTICK_Y_PIN, ALERT_ADC2_PIN, ALERT_ADC1_PIN};
@@ -15,10 +16,13 @@ uint8_t pullupPins[] = {START_BTN_PIN, STOP_BTN_PIN, JOYSTICK_BUTTON_PIN, ENCODE
 
 uint8_t selectedMenu = 0;
 uint8_t led = 0;
-uint16_t valADCs[8] = {0};
+volatile uint16_t valADCs[8] = {0,0,0,0,0,0,0,0};
 
 // Initialize static member of class Rotary_encoder
-int RotaryEncoder::rotation = 0;
+int RotaryEncoder0::rotation0 = 0;
+int RotaryEncoder1::rotation1 = 0;
+
+/* ------ Variables ------ */
 volatile int posi[] = {0,0};
 
 const int encodersA[] = {ENCODER_A1L_PIN, ENCODER_A2R_PIN};
@@ -53,7 +57,8 @@ ADS1015 adc2(ADC2_ADDRESS);
 MX1508 motorA(MOTOR_IN1R_PIN, MOTOR_IN2R_PIN, SLOW_DECAY);
 MX1508 motorB(MOTOR_IN3L_PIN, MOTOR_IN4L_PIN, SLOW_DECAY);
 
-RotaryEncoder encoderA(ENCODER_A1L_PIN, ENCODER_B1L_PIN);
+RotaryEncoder0 encoderA(ENCODER_A1L_PIN, ENCODER_B1L_PIN);
+RotaryEncoder1 encoderB(ENCODER_A2R_PIN, ENCODER_B2R_PIN);
 
 /* ------ Interrupts ------ */
 template <int t>
@@ -66,41 +71,17 @@ void readEncoder(){
 	}
 }
 
-void rotate90Right(){
-	digitalWrite(LED_BUILTIN, HIGH);
-	int lastPosi[] = {posi[0], posi[1]};
-	int currPosi[] = {posi[0], posi[1]};
-	motorA.motorGoP(75);
-	motorB.motorGoP(75);
-
+void readIR(){
 	while(1){
-		currPosi[0] = abs(posi[0] - lastPosi[0]);
-		currPosi[1] = abs(posi[1] - lastPosi[1]);
-		if(currPosi[0] >= pulsesPer90Degree && currPosi[1] >= pulsesPer90Degree){
-			motorA.motorBrake();
-			motorB.motorBrake();
-			digitalWrite(LED_BUILTIN, LOW);
-			break;
+		for(int i = 0; i < 8; i++){
+			if(i < 4){
+				valADCs[i] = adc2.readADC(i);
+			}
+			else{
+				valADCs[i] = adc1.readADC(i-4);
+			}
 		}
-	}
-}
-
-void moveMotor(int u, int motor){
-	float speed = u;
-	if(speed > 90){
-		speed = 90;
-	}
-	else if(speed < -90){
-		speed = -90;
-	}
-
-	overcomeLoad(speed);
-
-	if(motor == 1){
-		motorA.motorGoP(speed);
-	}
-	else{
-		motorB.motorGoP(speed);
+		delay(10);
 	}
 }
 
@@ -118,10 +99,12 @@ void setup() {
 		pinMode(pullupPins[i], INPUT_PULLUP);
 	}
 
-	Serial.begin(9600);
+	/* Start the Serial for printf */
+	// Serial.begin(9600);
 
-	adc1.begin();
-	adc1.setGain(1);
+	/* Start the ADCs to read the IR sensors */
+	adc1.begin();			
+	adc1.setGain(1);		
 	adc1.setDataRate(4);
 
 	adc2.begin();
@@ -129,10 +112,15 @@ void setup() {
 	adc2.setDataRate(4);
 
 	digitalWrite(LED_BUILTIN, HIGH);
-	
-	Serial.println("Initializing...");
 
-	encoderA.set_rotation(0);
+	/* Set the rotation to 0 */
+	encoderA.set_rotation0(0);
+	encoderB.set_rotation1(0);
+
+	/* With the encoders being taken care by the PIOs,
+	 * Use the extra core of the Rasp Pico W to constantly read the IR sensors
+	 */
+
 	//attachInterrupt(digitalPinToInterrupt(encodersA[0]), readEncoder<0>, CHANGE);
 	//attachInterrupt(digitalPinToInterrupt(encodersA[1]), readEncoder<1>, CHANGE);
 
@@ -142,8 +130,10 @@ void setup() {
 
 void loop() {
 
+	/* Show the initial frame (Custom rasp logo) with the rotating gears */
 	ShowStartup();
-	Serial.println("Showing startup screen...");
+	delay(200);
+
 	/* Display the menu and wait for the user input via joystick / buttons
 	 * This will lock the program until the user has selected an option
 	 */
@@ -153,53 +143,42 @@ void loop() {
 
 	switch (selectedMenu){
 		case CALIBRATION:
-			/* Show the calibration screen */
-			ShowCalibration();
-
 			/* Turn on the IR LEDs */
 			digitalWrite(IR_LEDS_PIN, HIGH);
+
+			/* Show the calibration screen */
+			ShowCalibration();
+			u8g.setFont(u8g_font_7x14B);
+			u8g.drawStr(30, 60, "Calibrating");
+			u8g.sendBuffer();
 
 			/* Read the sensors:
 			 * Change the ADC address to the first sensor, read the value and store it
 			 * Change the ADC address to the second sensor, read the value and store it
 			 */
-			for(int i = 0; i < 4; i++){
-				if(i <= 4){
-					valADCs[i] = adc2.readADC(i);
-				}
-				else{
-					valADCs[i] = adc1.readADC(i);
-				}
-				
-			}
+			
 
-			/* Show the calibration screen */
-			ShowCalibration();
-			u8g.setFont(u8g_font_7x14B);
-			u8g.drawStr( 10, 50, "Calibrating");
-			u8g.sendBuffer();
-
-			delay(2000);
+			delay(1000);
 			u8g.clearDisplay();
 
 			ShowDebugLedBG();
 			while(1){
-				for(int i = 0; i < 4; i++){
-				if(i <= 4){
-					valADCs[i] = adc2.readADC(i);
-				}
-				else{
-					valADCs[i] = adc1.readADC(i);
-				}
-				
-			}
 
+				// Read the IR sensors here:
+				for(int i = 0; i < 8; i++){
+					if(i < 4){
+						valADCs[i] = adc2.readADC(i);
+					}
+					else{
+						valADCs[i] = adc1.readADC(i-4);
+					}
+				}
 				ShowDebugLedP(valADCs);
+				delay(50);
 
 				if(digitalRead(STOP_BTN_PIN) == LOW){
 					break;
 				}
-				
 			}
 
 			break;
@@ -225,63 +204,7 @@ void loop() {
 			/* Turn on the IR LEDs */
 			digitalWrite(IR_LEDS_PIN, HIGH);
 			
-			int target = pulsesPerTurn;
-
-			digitalWrite(LED_BUILTIN, HIGH);
-			float kp = 2;
-			float kd = 0.5;
-			float ki = 0.0;
-			posi[0] = encoderA.get_rotation();
-			float u = pidController(target, kp, ki, kd, posi);
-			while(1){
-				posi[0] = encoderA.get_rotation();
-				u = pidController(target, kp, ki, kd, posi);
-
-				moveMotor(u, 0);
-
-				/*Serial.print(target);
-				Serial.print(", ");
-				Serial.println(posi[0]); */
-
-				/* u8g.clearBuffer();
-				u8g.drawStr( 10, 10, "Pos: ");
-				u8g.setCursor(50, 10);
-				u8g.print(posi[0]);
-				u8g.sendBuffer(); */
-
-				if(digitalRead(STOP_BTN_PIN) == LOW){
-					break;
-				}
-			}
-			digitalWrite(LED_BUILTIN, LOW);
-			motorA.motorBrake();
-			motorB.motorBrake();
-
-			delay(100);
-
-			motorA.motorStop();
-			motorB.motorStop();
-
-			//motorA.motorGo(150);
-			//motorB.motorGo(-150);
 			
-			//rotate90Right();
-
-
-			/* while(1){
-				u8g.clearBuffer();
-				u8g.drawStr( 10, 10, "Pos: ");
-				u8g.setCursor(50, 10);
-				u8g.print(posi);
-				u8g.sendBuffer();
-
-				
-				if(digitalRead(STOP_BTN_PIN) == LOW){
-					break;
-				}
-				//setMotor(1, outputPID, MOTOR_R1_PIN, MOTOR_R2_PIN);
-			} */
-
 
 
 
@@ -293,7 +216,7 @@ void loop() {
 				motorA.motorGoP(10*i);
 				delay(2000);
 				digitalWrite(LED_BUILTIN, HIGH);
-				delay(100);
+				delay(50);
 			}
 			
 			motorA.motorBrake();
