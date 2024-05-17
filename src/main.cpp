@@ -9,6 +9,7 @@
 #include "pid.h"
 #include "pio_rotary_encoder.h"
 #include "motorControl.h"
+#include "simplepress.h"
 
 /* ------ Pinmodes ------ */
 uint8_t inputPins[] = {JOYSTICK_X_PIN, JOYSTICK_Y_PIN, ALERT_ADC2_PIN, ALERT_ADC1_PIN};
@@ -61,6 +62,10 @@ float kp = 0.5;
 float kd = 0.1;
 float ki = 0.0;
 
+uint8_t startState = 0;
+uint8_t stopState = 0;
+uint8_t joystickState = 0;
+
 /* ------ Objects ------ */
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g;
 
@@ -72,6 +77,10 @@ MX1508 motorB(MOTOR_IN3L_PIN, MOTOR_IN4L_PIN, SLOW_DECAY);
 
 RotaryEncoder0 encoderA(ENCODER_A1L_PIN, ENCODER_B1L_PIN);
 RotaryEncoder1 encoderB(ENCODER_A2R_PIN, ENCODER_B2R_PIN);
+
+SimplePress startBtn(START_BTN_PIN, 100, 20);
+SimplePress stopBtn(STOP_BTN_PIN, 100, 20);
+SimplePress	joystickBtn(JOYSTICK_BUTTON_PIN, 100, 20);
 
 /* ------ Interrupts ------ */
 /* template <int t>
@@ -181,6 +190,9 @@ void setup() {
 	adc2.setDataRate(4);
 
 	//digitalWrite(LED_BUILTIN, HIGH);
+	startBtn.begin();
+	stopBtn.begin();
+	joystickBtn.begin();
 
 	/* Set the rotation to 0 */
 	encoderA.set_rotation0(0);
@@ -195,8 +207,6 @@ void setup() {
 
 	/* Also sets up the I2C for 12 bit reading */
 	SetupScreen();
-
-
 }
 
 void loop() {
@@ -251,7 +261,7 @@ void loop() {
 				ShowDebugLedP(valADCs);
 				delay(50);
 
-				if(digitalRead(JOYSTICK_BUTTON_PIN) == LOW){
+				if(stopBtn.pressed()){
 					break;
 				}
 			}
@@ -292,7 +302,7 @@ void loop() {
 				delay(50);
 
 				/* Check if the start button is pressed */
-				if (digitalRead(START_BTN_PIN) == LOW){
+				if (startBtn.pressed()){
 					break;
 				}
 			}
@@ -341,9 +351,9 @@ void loop() {
 
 				// AKA 1.649 m/s
 				motorA.motorGoP(90);
-				motorB.motorGoP(90);
+				motorB.motorGoP(-90);
 				
-				if(digitalRead(JOYSTICK_BUTTON_PIN) == LOW){
+				if(stopBtn.pressed()){
 					motorA.motorBrake();
 					motorB.motorBrake();
 
