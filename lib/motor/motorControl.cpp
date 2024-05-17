@@ -34,11 +34,11 @@ void rotate90Right(MX1508 motorA, MX1508 motorB, int posi[], int pulsesPer90Degr
 
 void moveMotor(int u, int motor, MX1508 motorA, MX1508 motorB){
 	float speed = u;
-	if(speed > 90){
-		speed = 90;
+	if(speed > MAX_PWM){
+		speed = MAX_PWM;
 	}
-	else if(speed < -90){
-		speed = -90;
+	else if(speed < -MAX_PWM){
+		speed = -MAX_PWM;
 	}
 
 	overcomeLoad(speed);

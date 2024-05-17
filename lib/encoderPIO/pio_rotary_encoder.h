@@ -19,6 +19,7 @@ public:
     // The B of the rotary encoder has to be connected to the next GPIO.
     RotaryEncoder0(uint rotary_encoder_A, uint rotary_encoder_B)
     {
+        delay(10);
         PIO pio_0 = pio0;
         
         // state machine 0
@@ -48,6 +49,7 @@ public:
         pio_sm_init(pio_0, sm0, 16, &c);
         // enable the sm
         pio_sm_set_enabled(pio_0, sm0, true);
+        delay(10);
     }
 
     // set the current rotation to a specific value
@@ -99,6 +101,7 @@ public:
     // The B of the rotary encoder has to be connected to the next GPIO.
     RotaryEncoder1(uint rotary_encoder_A, uint rotary_encoder_B)
     {
+        delay(10);
         PIO pio_1 = pio1;
         
         // state machine 0
@@ -128,6 +131,7 @@ public:
         pio_sm_init(pio_1, sm1, offset + 16, &c);
         // enable the sm
         pio_sm_set_enabled(pio_1, sm1, true);
+        delay(10);
     }
 
     // set the current rotation to a specific value

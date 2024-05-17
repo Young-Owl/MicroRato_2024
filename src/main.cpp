@@ -18,6 +18,7 @@ uint8_t pullupPins[] = {START_BTN_PIN, STOP_BTN_PIN, JOYSTICK_BUTTON_PIN, ENCODE
 uint8_t selectedMenu = 0;
 uint8_t led = 0;
 volatile uint16_t valADCs[8] = {0,0,0,0,0,0,0,0};
+uint8_t dataIR = 0;
 
 // Initialize static member of class Rotary_encoder
 int RotaryEncoder0::rotation0 = 0;
@@ -31,6 +32,7 @@ const int encodersB[] = {ENCODER_B1L_PIN, ENCODER_B2R_PIN};
 const int in1[] = {MOTOR_IN1R_PIN, MOTOR_IN3L_PIN};
 const int in2[] = {MOTOR_IN2R_PIN, MOTOR_IN4L_PIN};
 
+/* ============================== Constants for the encoders ============================== */
 /* Motor encoders have 7PPR, so 7 pulses per revolution
  * The motor has 500 RPM with reduction ratio of 1:30
  * When using wheel with 67mm diameter, the circumference is 210mm
@@ -42,16 +44,22 @@ uint16_t pulsesPerTurn = pulsesPerRevolution * reductionRatio;
 uint16_t countsPerTurn = countsPerRevolution * reductionRatio;
 double wheelCircumference = 0.2199115;									// Wheel circumference (70mm diameter)
 uint16_t pulsesPerMeter = round(pulsesPerTurn / wheelCircumference);
+uint16_t countsPerMeter = round(countsPerTurn / wheelCircumference);
 
 double wheelBase = 0.167;
 double circumference = 3.14159 * wheelBase;
 double formulaBase = circumference / wheelCircumference;
 uint16_t pulsesPer90Degree = round((circumference / 4) * pulsesPerMeter);
+/* ========================================================================================= */
 
 float target_f[] = {0,0};
 long target[] = {0,0};
 long previousTime = 0;
 float u[2] = {0,0};
+
+float kp = 0.5;
+float kd = 0.1;
+float ki = 0.0;
 
 /* ------ Objects ------ */
 extern U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g;
@@ -66,7 +74,7 @@ RotaryEncoder0 encoderA(ENCODER_A1L_PIN, ENCODER_B1L_PIN);
 RotaryEncoder1 encoderB(ENCODER_A2R_PIN, ENCODER_B2R_PIN);
 
 /* ------ Interrupts ------ */
-template <int t>
+/* template <int t>
 void readEncoder(){
 	if(digitalRead(encodersB[t]) == digitalRead(encodersA[t])){
 		posi[t]++;
@@ -74,29 +82,39 @@ void readEncoder(){
 	else{
 		posi[t]--;
 	}
-}
+} */
 
 void readIR(){
-	while(1){
-		for(int i = 0; i < 8; i++){
-			if(i < 4){
-				valADCs[i] = adc2.readADC(i);
-			}
-			else{
-				valADCs[i] = adc1.readADC(i-4);
-			}
+	for(int i = 0; i < 8; i++){
+		if(i < 4){
+			valADCs[i] = adc2.readADC(i);
 		}
-		delay(10);
+		else{
+			valADCs[i] = adc1.readADC(i-4);
+		}
+	}
+	delay(10);
+}
+
+void formatIRData(){
+	for(int i = 0; i < 8; i++){
+		if(valADCs[i] > IR_THRESHOLD){
+			dataIR |= (1 << i);
+		}
 	}
 }
 
-void setTarget(float t, float deltaT){
+/* Turns per second */
+void setTargetTurns(float t, float deltaT, float velocity = 1){
 	float positionChange[2] = {0.0,0.0};
-	float velocicity = 1;
 
-	for(int k = 0; k < 2; k++){
-		positionChange[k] = velocicity * deltaT * pulsesPerTurn*4;
+	if(velocity > MAX_TURNS_PER_SECOND + 0.5){
+		velocity = MAX_TURNS_PER_SECOND + 0.5;
 	}
+
+	// x turns per second, mouse has a bias to to the left, so turn the left motor a bit faster
+	positionChange[0] = (velocity*1.0125) * deltaT * (countsPerTurn);
+	positionChange[1] = (velocity) * deltaT * (countsPerTurn);
 
 	for(int k = 0; k < 2; k++){
 		target_f[k] = target_f[k] + positionChange[k];
@@ -106,8 +124,38 @@ void setTarget(float t, float deltaT){
 	target[1] = -(long) target_f[1];
 }
 
+/* Meters per second */
+void setTargetMeters(float t, float deltaT, float velocity = 1){
+	float positionChange[2] = {0.0,0.0};
+
+	if(velocity > MAX_METERS_PER_SECOND + 0.5){
+		velocity = MAX_METERS_PER_SECOND + 0.5;
+	}
+
+	// x turns per second, mouse has a bias to to the left, so turn the left motor a bit faster
+	positionChange[0] = (velocity*1.01) * deltaT * (countsPerMeter);
+	positionChange[1] = (velocity) * deltaT * (countsPerMeter);
+
+	for(int k = 0; k < 2; k++){
+		target_f[k] = target_f[k] + positionChange[k];
+	}
+
+	target[0] = (long) target_f[0];
+	target[1] = -(long) target_f[1];
+}
+
+void strait(float velocity, uint8_t direction, bool meters = false){
+	if(meters){
+		setTargetMeters(0, 0, velocity);
+	}
+	else{
+		setTargetTurns(0, 0, velocity);
+	}
+}
+
 /* ------ Setup ------ */
 void setup() {
+	set_sys_clock_khz(133000, true);
 
 	/* Setup the pinmodes */
 	for (uint8_t i = 0; i < sizeof(inputPins); i++){
@@ -132,7 +180,7 @@ void setup() {
 	adc2.setGain(1);
 	adc2.setDataRate(4);
 
-	digitalWrite(LED_BUILTIN, HIGH);
+	//digitalWrite(LED_BUILTIN, HIGH);
 
 	/* Set the rotation to 0 */
 	encoderA.set_rotation0(0);
@@ -147,6 +195,8 @@ void setup() {
 
 	/* Also sets up the I2C for 12 bit reading */
 	SetupScreen();
+
+
 }
 
 void loop() {
@@ -170,7 +220,7 @@ void loop() {
 			/* Show the calibration screen */
 			ShowCalibration();
 			u8g.setFont(u8g_font_7x14B);
-			u8g.drawStr(30, 60, "Calibrating");
+			u8g.drawStr(20, 60, "Calibrating");
 			u8g.sendBuffer();
 
 			/* Read the sensors:
@@ -186,18 +236,22 @@ void loop() {
 			while(1){
 
 				// Read the IR sensors here:
+				readIR();
+
+				/* Transform the IR sensors data into a 8bit binary number
+				 * If the sensor is above the threshold, set the bit to 1 
+				 * (Meaning that a black line is bellow)
+				 */
 				for(int i = 0; i < 8; i++){
-					if(i < 4){
-						valADCs[i] = adc2.readADC(i);
-					}
-					else{
-						valADCs[i] = adc1.readADC(i-4);
+					if(valADCs[i] > IR_THRESHOLD){
+						dataIR |= (1 << i);
 					}
 				}
+
 				ShowDebugLedP(valADCs);
 				delay(50);
 
-				if(digitalRead(STOP_BTN_PIN) == LOW){
+				if(digitalRead(JOYSTICK_BUTTON_PIN) == LOW){
 					break;
 				}
 			}
@@ -225,24 +279,55 @@ void loop() {
 			/* Turn on the IR LEDs */
 			digitalWrite(IR_LEDS_PIN, HIGH);
 			
-			float kp = 2;
-			float kd = 0.6;
-			float ki = 0.0;
+			u8g.clearBuffer();
+			// ordot font
+			u8g.setFont(u8g_font_5x7);
+			u8g.drawStr(0, 10, "Initial Run - Preparations");
+
+			/* Wait for the "START BUTTON" to be pressed, once pressed start the maze discovery */
+			while(1){
+				/* Read the IR sensors */
+				readIR();
+				ShowDebugLedP(valADCs);
+				delay(50);
+
+				/* Check if the start button is pressed */
+				if (digitalRead(START_BTN_PIN) == LOW){
+					break;
+				}
+			}
+
+			u8g.clearBuffer();
+			u8g.drawStr(40, 10, "Starting");
+			u8g.drawStr(20, 30, "Filling the batery");
+			u8g.drawStr(25, 40, "with gasoline...");
+			u8g.sendBuffer();
+			delay(3000);
+
+			/* Start the initial run */
+			
+			
+
+
+			break;
+		}
+		case PERFECTED_RUN:
+			
 			previousTime = micros();
 
 			while(1){
-				long currentTime = micros();
+				/* long currentTime = micros();
 				float deltaT = ((float) (currentTime - previousTime)) / 1e6;	
 				previousTime = currentTime;
 
 				posi[0] = encoderA.get_rotation0();
-				posi[1] = encoderB.get_rotation1();
+				posi[1] = encoderB.get_rotation1(); */
 
 				/* Set the target position */
-				setTarget(currentTime/1.0e6, deltaT);
+				/* setTargetMeters(currentTime/1.0e6, deltaT, 1.6);
 				pidController(target, kp, ki, kd, deltaT, posi, &u[0], &u[1]);
 				moveMotor(u[0], 0, motorA, motorB);
-				moveMotor(u[1], 1, motorA, motorB);
+				moveMotor(u[1], 1, motorA, motorB); */
 
 				/* u8g.clearBuffer();
 				u8g.drawStr(10, 10, "Pos: ");
@@ -254,24 +339,21 @@ void loop() {
 				u8g.print(target[1]);
 				u8g.sendBuffer(); */
 
-				if(digitalRead(STOP_BTN_PIN) == LOW){
+				// AKA 1.649 m/s
+				motorA.motorGoP(90);
+				motorB.motorGoP(90);
+				
+				if(digitalRead(JOYSTICK_BUTTON_PIN) == LOW){
+					motorA.motorBrake();
+					motorB.motorBrake();
+
+					delay(100);
+
+					motorA.motorStop();
+					motorB.motorStop();
 					break;
 				}
 			}
-
-
-			break;
-		}
-		case PERFECTED_RUN:
-			while(1){
-				u8g.clearBuffer();
-				u8g.drawStr(10, 10, "Pos: ");
-				u8g.print(posi[0]);
-
-				u8g.drawStr(10, 40, "Target: ");
-				u8g.print(target[0]);
-			}
-			u8g.clearBuffer();
 			
 
 		default:

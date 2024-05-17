@@ -32,27 +32,44 @@ uint8_t rotateGear = 0;
 void SetupScreen() {
 	// Set up the I2C bus
 	Wire.begin();
+	
+	digitalWrite(LED_BUILTIN, HIGH);
+	delay(100);
+	digitalWrite(LED_BUILTIN, LOW);
 
 	// Set up SSD1306 display
 	u8g.begin();  
 	u8g.setFont(u8g_font_7x14);
 	u8g.setColorIndex(1);
 
+	digitalWrite(LED_BUILTIN, HIGH);
+	delay(100);
+	digitalWrite(LED_BUILTIN, LOW);
+
 	// Set up the Joystick module
-	pinMode(JOYSTICK_X1_PIN, INPUT);
+	/* pinMode(JOYSTICK_X1_PIN, INPUT);
 	pinMode(JOYSTICK_Y1_PIN, INPUT);
 	pinMode(START_BTN1_PIN, INPUT_PULLUP);
-	pinMode(STOP_BTN1_PIN, INPUT_PULLUP);
+	pinMode(STOP_BTN1_PIN, INPUT_PULLUP); */
 
 	analogReadResolution(12);
+	digitalWrite(LED_BUILTIN, HIGH);
+	delay(100);
+	digitalWrite(LED_BUILTIN, LOW);
 
 	// Get default Joystick position values
 	for(int i = 0; i < 10; i++){
 		defaultXValue += analogRead(JOYSTICK_X1_PIN);
+		delay(1);
 		defaultYValue += analogRead(JOYSTICK_Y1_PIN);
+		delay(1);
 	}
 	defaultXValue = defaultXValue / 10;
 	defaultYValue = defaultYValue / 10;
+
+	digitalWrite(LED_BUILTIN, HIGH);
+	delay(100);
+	digitalWrite(LED_BUILTIN, LOW);
 
 	// Draw the initial screen
 	u8g.clearBuffer();
@@ -76,7 +93,7 @@ void ShowStartup(){
 			u8g.sendBuffer();
 			rotateGear = 0;
 		}
-		delay(250);
+		delay(200);
 	}
 }
 
